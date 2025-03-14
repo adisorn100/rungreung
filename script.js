@@ -1,18 +1,31 @@
-const SPREADSHEET_ID = "1FTir6myrkrU1KP7AyqRaKaQiKmX2jKIx4iKVx28QM0w"; // ใส่ Sheet ID
-const SHEET_NAME = "ชีต1"; // ชื่อชีตของคุณ
-const TOKEN_URL = "https://script.google.com/macros/s/AKfycby3W1ArMO5Gyz_7WTeayqNYMyUYZF0d9nhps8XcviHj6fw_so6MLQG4DquWurA88KxVGQ/exec"; // 🔥 ใส่ URL ของ Apps Script
+const SPREADSHEET_ID = "1FTir6myrkrU1KP7AyqRaKaQiKmX2jKIx4iKVx28QM0w"; // Sheet ID
+const SHEET_NAME = "ชีต1"; // ชื่อชีต
+const TOKEN_URL = "https://script.google.com/macros/s/AKfycby3W1ArMO5Gyz_7WTeayqNYMyUYZF0d9nhps8XcviHj6fw_so6MLQG4DquWurA88KxVGQ/exec"; // Apps Script Token URL
 
-// ✅ ดึง Access Token จาก Google Apps Script
+// ✅ ดึง Access Token จาก Apps Script
 async function getAccessToken() {
-    const response = await fetch(TOKEN_URL);
-    const token = await response.text();
-    return token;
+    try {
+        const response = await fetch(TOKEN_URL);
+        const token = await response.text();
+        if (!token) throw new Error("❌ ไม่สามารถรับ Access Token");
+        return token;
+    } catch (error) {
+        console.error("❌ เกิดข้อผิดพลาดในการรับ Access Token:", error);
+        return null;
+    }
 }
 
 // ✅ ฟังก์ชันส่งข้อมูลไปยัง Google Sheets
 async function sendData() {
     const accessToken = await getAccessToken();
     if (!accessToken) return;
+
+    // 🔥 ตรวจสอบเบอร์โทรให้มีแค่ตัวเลขและต้องเป็น 10 หลัก
+    let phoneNumber = document.getElementById("tl").value.trim();
+    if (!/^\d{10}$/.test(phoneNumber)) {
+        Swal.fire({ icon: "warning", title: "❌ เบอร์โทรไม่ถูกต้อง", text: "กรุณากรอกเบอร์โทร 10 หลัก" });
+        return;
+    }
 
     const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:G:append?valueInputOption=RAW`;
 
@@ -22,7 +35,7 @@ async function sendData() {
             values: [[
                 new Date().toLocaleString('th-TH'),
                 document.getElementById("fn").value,
-                document.getElementById("tl").value,
+                phoneNumber,
                 document.getElementById("rm").value,
                 document.getElementById("am").value,
                 "กำลังดำเนินการ",
@@ -35,10 +48,10 @@ async function sendData() {
         }
     })
     .then(res => res.json())
-    .then(response => {
+    .then(() => {
         Swal.fire({
             icon: 'success',
-            title: 'แจ้งซ่อมสำเร็จ',
+            title: '✅ แจ้งซ่อมสำเร็จ',
             text: 'ข้อมูลถูกบันทึกแล้ว',
             timer: 2000
         });
@@ -46,17 +59,24 @@ async function sendData() {
     })
     .catch(error => {
         console.error("❌ Error:", error);
+        Swal.fire({
+            icon: "error",
+            title: "❌ ไม่สามารถบันทึกข้อมูลได้",
+            text: "โปรดตรวจสอบระบบอีกครั้ง"
+        });
     });
 }
 
 // ✅ ฟังก์ชันค้นหาข้อมูลจาก Google Sheets
 async function searchData() {
-    const keyword = document.getElementById("keyword").value.trim();
+    const keyword = document.getElementById("keyword").value.trim().toLowerCase();
+    const statusFilter = document.getElementById("statusFilter").value;
     const result = document.getElementById("result");
-    const accessToken = await getAccessToken();
-    if (!accessToken) return;
 
     result.innerHTML = "🔄 กำลังค้นหา...";
+
+    const accessToken = await getAccessToken();
+    if (!accessToken) return;
 
     const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:G`;
 
@@ -69,12 +89,14 @@ async function searchData() {
     })
     .then(res => res.json())
     .then(data => {
-        console.log("📌 Data from API:", data);
         const rows = data.values || [];
 
-        const filteredRows = rows.filter(row =>
-            row.slice(1, 4).some(cell => (cell || "").toLowerCase().includes(keyword.toLowerCase()))
-        );
+        // 🔥 ค้นหาจากคีย์เวิร์ดและตัวกรองสถานะ
+        const filteredRows = rows.filter(row => {
+            const matchesKeyword = row.slice(1, 4).some(cell => (cell || "").toLowerCase().includes(keyword));
+            const matchesStatus = statusFilter ? row[5] === statusFilter : true;
+            return matchesKeyword && matchesStatus;
+        });
 
         if (filteredRows.length === 0) {
             result.innerHTML = `<div class="alert alert-warning">❌ ไม่พบข้อมูล</div>`;
@@ -86,12 +108,13 @@ async function searchData() {
                     </tr></thead><tbody>`;
 
         filteredRows.forEach((row, index) => {
+            let statusClass = row[5] === "เสร็จสิ้น" ? "badge bg-success" : "badge bg-danger";
             html += `<tr>
                         <td>${row[1] || "-"}</td>
                         <td>${row[2] || "-"}</td>
                         <td>${row[3] || "-"}</td>
                         <td>${row[4] || "-"}</td>
-                        <td>${row[5] || "-"}</td>
+                        <td><span class="${statusClass}">${row[5] || "-"}</span></td>
                         <td>${row[6] || "-"}</td>
                         <td>
                             <button class="btn btn-success btn-sm" onclick="updateStatus(${index + 1}, prompt('ใส่ชื่อผู้ปิดงาน'))">✅ ปิดงาน</button>
@@ -106,6 +129,13 @@ async function searchData() {
         console.error("❌ Error:", error);
         result.innerHTML = `<div class="alert alert-danger">❌ เกิดข้อผิดพลาดในการค้นหา</div>`;
     });
+}
+
+// ✅ ฟังก์ชันล้างการค้นหา
+function clearSearch() {
+    document.getElementById("keyword").value = "";
+    document.getElementById("statusFilter").value = "";
+    document.getElementById("result").innerHTML = "";
 }
 
 // ✅ ฟังก์ชันอัปเดตสถานะเป็น "เสร็จสิ้น" พร้อมชื่อผู้ปิดงาน
@@ -126,64 +156,16 @@ async function updateStatus(rowNumber, staffName) {
             "Content-Type": "application/json"
         }
     })
-    .then(res => res.json())
-    .then(response => {
+    .then(() => {
         Swal.fire({
             icon: 'success',
             title: '📌 ปิดงานสำเร็จ',
             text: 'ข้อมูลถูกอัปเดตแล้ว',
             timer: 2000
         });
-        searchData(); // รีเฟรชผลการค้นหา
+        searchData();
     })
     .catch(error => {
         console.error("❌ Error:", error);
     });
 }
-
-	// ✅ ฟังก์ชัน Export ข้อมูลเป็น Excel
-async function exportToExcel() {
-    const accessToken = await getAccessToken();
-    if (!accessToken) return;
-
-    const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:G`;
-
-    fetch(API_URL, {
-        method: "GET",
-        headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-        }
-    })
-    .then(res => res.json())
-    .then(data => {
-        const rows = data.values || [];
-
-        if (rows.length === 0) {
-            Swal.fire({
-                icon: "warning",
-                title: "❌ ไม่มีข้อมูล",
-                text: "ไม่พบข้อมูลสำหรับดาวน์โหลด"
-            });
-            return;
-        }
-
-        // ✅ สร้างไฟล์ Excel
-        let ws = XLSX.utils.aoa_to_sheet(rows);
-        let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ข้อมูลแจ้งซ่อม");
-
-        // ✅ ดาวน์โหลดไฟล์
-        XLSX.writeFile(wb, "repair_data.xlsx");
-    })
-    .catch(error => {
-        console.error("❌ Error exporting data:", error);
-        Swal.fire({
-            icon: "error",
-            title: "❌ ดาวน์โหลดล้มเหลว",
-            text: "มีข้อผิดพลาดในการดาวน์โหลดไฟล์"
-        });
-    });
-}
-
-
