@@ -131,12 +131,6 @@ async function searchData() {
     });
 }
 
-#result 
-{
-    max-height: 400px;
-    overflow-y: auto;
-}
-
 // ✅ ฟังก์ชันล้างการค้นหา
 function clearSearch() {
     document.getElementById("keyword").value = "";
