@@ -144,6 +144,31 @@ async function updateStatus(rowNumber, staffName) {
     const accessToken = await getAccessToken();
     if (!accessToken) return;
 
+    // เช็คค่าในเซลล์ F และ G ของแถวที่ต้องการอัปเดต
+    const checkAPI = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!F${rowNumber + 1}:G${rowNumber + 1}`;
+    const response = await fetch(checkAPI, {
+        headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+        }
+    });
+
+    const data = await response.json();
+    const currentStatus = data.values ? data.values[0][0] : null;
+    const currentStaff = data.values ? data.values[0][1] : null;
+
+    // ถ้าสถานะเป็น "เสร็จสิ้น" และมีชื่อผู้ปิดงานแล้ว ไม่ให้ทำการอัปเดต
+    if (currentStatus === "เสร็จสิ้น" && currentStaff) {
+        Swal.fire({
+            icon: 'info',
+            title: 'ข้อมูลถูกปิดงานแล้ว',
+            text: 'ไม่สามารถอัปเดตข้อมูลได้อีก',
+            timer: 2000
+        });
+        return;
+    }
+
+    // ถ้าไม่ใช่ "เสร็จสิ้น" หรือไม่มีชื่อผู้ปิดงานให้ทำการอัปเดตสถานะเป็น "เสร็จสิ้น" พร้อมชื่อผู้ปิดงาน
     const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!F${rowNumber + 1}:G${rowNumber + 1}?valueInputOption=USER_ENTERED`;
 
     fetch(API_URL, {
@@ -169,3 +194,4 @@ async function updateStatus(rowNumber, staffName) {
         console.error("❌ Error:", error);
     });
 }
+
