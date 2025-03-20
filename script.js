@@ -194,4 +194,38 @@ async function updateStatus(rowNumber, staffName) {
         console.error("❌ Error:", error);
     });
 }
+async function exportToExcel() {
+    const accessToken = await getAccessToken();
+    if (!accessToken) return;
+
+    const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:G`;
+
+    fetch(API_URL, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        const rows = data.values || [];
+        if (rows.length === 0) {
+            Swal.fire({ icon: "warning", title: "❌ ไม่มีข้อมูล", text: "ไม่มีข้อมูลในระบบ" });
+            return;
+        }
+
+        // สร้างไฟล์ Excel
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "ข้อมูลการซ่อม");
+
+        // ดาวน์โหลดไฟล์ Excel
+        XLSX.writeFile(wb, "ข้อมูลการซ่อม.xlsx");
+    })
+    .catch(error => {
+        console.error("❌ Error:", error);
+        Swal.fire({ icon: "error", title: "❌ ไม่สามารถดาวน์โหลดข้อมูลได้", text: "โปรดตรวจสอบระบบอีกครั้ง" });
+    });
+}
 
